@@ -17,6 +17,8 @@
 #include "ao/game_api.h"
 #include "ao/dvalue_dump.h"
 #include "hooks/camera_hook.h"
+#include "hooks/ground_hq_hook.h"
+#include "hooks/release_guard_hook.h"
 
 #include <windows.h>
 
@@ -68,6 +70,11 @@ DWORD WINAPI DeferredInit(LPVOID /*param*/) {
     aor::GameAPI::RegisterBool("AOR_CamOn", true);
     aor::GameAPI::RegisterInt("AOR_CYawSpd", 2);
 
+    // Ground high-quality VB scale (1..8, default 4). Raises the effective
+    // DisplayGroundFullQualityRadius ceiling by enlarging the per-patch
+    // terrain vertex buffers. Changes take effect on next zone load.
+    aor::GameAPI::RegisterInt("AOR_GndVBScale", 4);
+
     // Wait for game world.
     aor::Log("[init] waiting for game world...");
     for (int i = 0; i < 600; ++i) {
@@ -81,6 +88,19 @@ DWORD WINAPI DeferredInit(LPVOID /*param*/) {
         // Install camera hooks now that GUI.dll and N3.dll are loaded.
         if (!aor::InitCameraHooks()) {
             aor::Log("[init] camera hooks failed — running without camera mod");
+        }
+
+        // Install ground-VB scale hook. DisplaySystem.dll is loaded by the
+        // time we reach the game world.
+        if (!aor::InitGroundHQHook()) {
+            aor::Log("[init] ground HQ hook failed — HQ radius > 48 unsafe");
+        }
+
+        // Install defensive guard on randy31's ReleaseRResource. Protects
+        // against the zone-teardown use-after-free that surfaces at high
+        // DisplayGroundFullQualityRadius (and potentially other paths).
+        if (!aor::InitReleaseGuardHook()) {
+            aor::Log("[init] release guard hook failed — zone-change CTD risk");
         }
     } else {
         aor::Log("[init] timed out waiting for game world");

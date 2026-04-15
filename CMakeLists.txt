@@ -37,6 +37,8 @@ add_library(AOReloaded SHARED
     src/ao/dvalue_dump.cpp
     src/hooks/hook_engine.cpp
     src/hooks/camera_hook.cpp
+    src/hooks/ground_hq_hook.cpp
+    src/hooks/release_guard_hook.cpp
 )
 
 set_target_properties(AOReloaded PROPERTIES

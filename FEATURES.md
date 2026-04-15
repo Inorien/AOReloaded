@@ -17,6 +17,16 @@ Additionally, any **right-click drag** realigns your character to face the direc
 
 **Config:** Options panel (F10) → **AOReloaded** tab → **Camera** → "WoW-style camera (auto-recenter after LMB drag)". Lerp speed is controlled by the `AOR_CYawSpd` DValue (default 5; higher = snappier follow).
 
+### Extended Ground Full Quality Radius
+The stock client's **Display → Ground Full Quality Radius** slider caps at 44 and hard-crashes above ~48 because the per-patch terrain vertex buffer overflows. AOReloaded enlarges those vertex buffers at allocation time, letting you push the radius significantly higher without CTD. Without this, `DisplayGroundFullQualityRadius > 48` stomps the heap during the first render of a zone.
+
+**Config:**
+1. Options panel (F10) → **AOReloaded** tab → **Graphics** → **Ground VB size multiplier**. Default is `4x` (enough for radius ~100). Range `1..8`. Changes take effect on the next zone load (new `AnarchyGround_t` instance allocates fresh VBs).
+2. Then raise **Display → Ground Full Quality Radius** (XML slider `max` already bumped to 100 in `LoginPrefs.xml`). Use values up to roughly `48 × sqrt(multiplier)` — i.e. `multiplier=4` supports radius ~96.
+3. Relog or travel to a new playfield so the ground is rebuilt.
+
+**Memory cost:** per-zone terrain VB size scales linearly with the multiplier. `4x` typically adds a few MB of VRAM per zone; `8x` is the ceiling for paranoid users.
+
 <!-- 
 Template for adding features:
 
