@@ -13,6 +13,12 @@ There are no guarantees of functionality nor stability on other Anarchy Online c
 
 To uninstall, delete `version.dll` from the client folder.
 
+#### Linux
+
+From TinkeringIdiot:
+
+- Use `WINEPREFIX=~/.prk wineconfig` and add the override for version.dll to ensure the search-order hijack works correctly
+
 ## Features
 
 ### WoW-style Camera
