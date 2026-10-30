@@ -21,6 +21,10 @@
 #include "hooks/camera_hook.h"
 #include "hooks/numpad_fix.h"
 #include "hooks/timer_bar_drag.h"
+#include "hooks/bag_move.h"
+#include "hooks/alt_select.h"
+#include "hooks/inventory_pins.h"
+#include "hooks/skill_favorites.h"
 
 #include <windows.h>
 
@@ -72,6 +76,30 @@ DWORD WINAPI DeferredInit(LPVOID /*param*/) {
     // Ensure the AOReloaded tab exists in the options panel XML.
     // Must happen before the game parses Root.xml (during world load).
     aor::PatchOptionsXml();
+    aor::PatchSkillsXml();
+
+    // Ctrl+click inventory <-> backpack. GUI.dll and Interfaces.dll are static
+    // imports of the exe, so they're loaded already; installing before world
+    // load means backpacks the client re-opens on login are tracked too.
+    if (!aor::InitBagMove()) {
+        aor::Log("[init] bag move failed — ctrl+click won't move items to/from backpacks");
+    }
+
+    // Alt+click multi-select. GUI.dll and Interfaces.dll are static imports
+    // of the exe, so they're loaded already.
+    if (!aor::InitAltSelect()) {
+        aor::Log("[init] alt select failed — alt+click won't select items");
+    }
+
+    // Pinned inventory items (Ctrl+Alt+click, forwarded by alt select).
+    if (!aor::InitInventoryPins()) {
+        aor::Log("[init] inventory pins failed — ctrl+alt+click won't pin items");
+    }
+
+    // Skills window: Favorites group (Ctrl+Alt+click) and Shift+click +/-5.
+    if (!aor::InitSkillFavorites()) {
+        aor::Log("[init] skill favorites failed — skills window unchanged");
+    }
 
     // Wait for game world. 
     aor::Log("[init] waiting for game world...");

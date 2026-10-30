@@ -7,6 +7,26 @@
     },
     "configurePresets": [
         {
+            "name": "linux-release",
+            "displayName": "Release (x86, Linux / WSL cross via xwin)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/linux-release",
+            "toolchainFile": "${sourceDir}/cmake/xwin-linux.cmake",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "windows-release",
+            "displayName": "Release (x86, clang-cl on Windows)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/windows-release",
+            "toolchainFile": "${sourceDir}/cmake/windows-clangcl.cmake",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
             "name": "base",
             "hidden": true,
             "generator": "Ninja",
@@ -47,6 +67,14 @@
         }
     ],
     "buildPresets": [
+        {
+            "name": "linux-release",
+            "configurePreset": "linux-release"
+        },
+        {
+            "name": "windows-release",
+            "configurePreset": "windows-release"
+        },
         {
             "name": "debug",
             "configurePreset": "debug"

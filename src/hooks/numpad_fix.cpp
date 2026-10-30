@@ -10,6 +10,7 @@
 #include "hooks/numpad_fix.h"
 #include "hooks/hook_engine.h"
 #include "ao/game_api.h"
+#include "ao/gui_build.h"
 #include "ao/types.h"
 #include "core/logging.h"
 
@@ -42,10 +43,12 @@ static bool Init() {
         Log("[numpad] GUI.dll not loaded");
         return false;
     }
+    const GuiBuild* addrs = GuiAddrs();
+    if (!addrs) return false;
     auto base = reinterpret_cast<uintptr_t>(gui);
 
-    WC_GetInstance     = reinterpret_cast<FnWCGetInstance>(base + 0xb454);
-    WC_HandleTextInput = reinterpret_cast<FnHandleTextInput>(base + 0x156f92);
+    WC_GetInstance     = reinterpret_cast<FnWCGetInstance>(base + addrs->wcGetInstance);
+    WC_HandleTextInput = reinterpret_cast<FnHandleTextInput>(base + addrs->wcHandleTextInput);
 
     Log("[numpad] GUI API resolved: WC_GetInstance=%p, HandleTextInput=%p",
         reinterpret_cast<void*>(WC_GetInstance),
@@ -124,7 +127,7 @@ static bool IsNumpadFixEnabled() {
 //   +0x27: uint8_t   static_mode_3 (static text input mode flag)
 //   +0x67: uint8_t   text_input_mode (set by SetTextInputMode when chat focused)
 
-constexpr uint32_t kCheckInputRVA = 0x1a4c1;
+// InputConfig_t::CheckInput: GuiBuild::checkInput.
 
 using FnCheckInput = void(__thiscall*)(void* this_ecx, void* inputInfo);
 static FnCheckInput g_origCheckInput = nullptr;
@@ -191,7 +194,7 @@ bool InitNumpadFix() {
         return false;
     }
 
-    void* addr = ResolveRVA("GUI.dll", kCheckInputRVA);
+    void* addr = ResolveRVA("GUI.dll", GuiAddrs()->checkInput);
     if (!addr) {
         Log("[numpad] CheckInput RVA resolve failed");
         return false;

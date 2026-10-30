@@ -17,6 +17,7 @@
 #include "hooks/input_handler.h"
 #include "hooks/hook_engine.h"
 #include "ao/game_api.h"
+#include "ao/gui_build.h"
 #include "ao/types.h"
 #include "core/logging.h"
 #include "core/settings.h"
@@ -45,12 +46,10 @@ static constexpr int kDefaultBarW     = 113;  // native fill-sprite width
 static constexpr int kDefaultBarH     = 10;   // native fill-sprite height
 static constexpr int kSlotPadding     = 4;    // visible gap between bars
 
-// GUI.dll RVAs.
-static constexpr uint32_t kCreateTimerRVA       = 0x518f0;   // TimerBar_c path (logout, camp)
-static constexpr uint32_t kCreateGameTimerRVA   = 0x5195b;   // GameTimerBar_c path (equip, nano, attack, reload)
-static constexpr uint32_t kRWRepositionRVA      = 0x20f6e;   // RenderWindow_t::Reposition
-// RenderWindow_t::SetScale RVA resolved inline in init (0x20b0c).
-// RenderWindow_t::Resize at 0x20938 only re-tiles background, doesn't scale content.
+// GUI.dll addresses come from GuiAddrs() (ao/gui_build.h): CreateTimer's
+// TimerBar_c path (logout, camp) and GameTimerBar_c path (equip, nano,
+// attack, reload), RenderWindow_t::Reposition / SetScale / Resize.
+// RenderWindow_t::Resize only re-tiles background, doesn't scale content.
 
 // TimerBarBase_c field offsets.
 static constexpr int kBarRenderWindow = 0x04;
@@ -88,32 +87,29 @@ static const char* const kTypeLabels[6] = {
 // as two signed ints in-game, so 0x7FFFFFF1..0x7FFFFFF5 are safe.
 static constexpr int kPreviewInstanceBase = 0x7FFFFFF0;
 
-// PowerBar_t::AdjustPowerLevel(float) — GUI.dll RVA 0x205de.  Sets fill 0..1.
-static constexpr uint32_t kPBAdjustPowerLevelRVA = 0x205de;
+// PowerBar_t::AdjustPowerLevel(float) sets fill 0..1.
 
-// TSM::StopTimerbarMessage at GUI.dll RVA 0x518b0 — verified via Ghidra.
+// TSM::StopTimerbarMessage — verified via Ghidra.
 // Walks the timer list, matches by (type, instance) with instance==-1 acting
 // as a type-wide wildcard, and calls the private TSM::DeleteTimer on matches.
 // DeleteTimer frees slot_flags[slot_index] at TSM+0x34, invokes the bar's
 // scalar-deleting destructor at vftable[1] (arg=1 → run dtor + operator
 // delete), then erases the std::list node cleanly.  End-to-end zero-leak
 // removal — preferred over our manual fallback.
-static constexpr uint32_t kTSMStopTimerbarRVA = 0x518b0;
 
 // ── N3InterfaceModule_t API — name resolution ───────────────────────────
 // Function pointers are cached in GUI.dll's data section, filled at
 // runtime by the game's module system.  Read via ReadCachedPtr.
 
-// GUI.dll data-section RVAs for N3InterfaceModule_t function pointers.
-static constexpr uint32_t kN3IMGetInstanceRVA = 0x1a772c;  // N3InterfaceModule_t::GetInstance
-static constexpr uint32_t kN3MsgGetNameRVA    = 0x1a7724;  // N3Msg_GetName
+// GUI.dll data-section RVAs for N3InterfaceModule_t function pointers:
+// GuiBuild::iatN3IMGetInstance, iatN3MsgGetName.
 
 using FnN3IMGetInstance = void*(__cdecl*)();
 using FnN3MsgGetName = const char*(__thiscall*)(void* n3im,
                                                  const int* identity1,
                                                  const int* identity2);
 
-// Unused API thunks kept for documentation / future use:
+// Unused API thunks kept for documentation / future use (PRK 2019 build):
 //   kN3MsgGetSkillRVA    = 0x1a7728  — N3Msg_GetSkill(Stat_e, int), 2-param local player overload
 //   kN3MsgGetSkill4RVA   = 0x1a773c  — N3Msg_GetSkill(Identity_t&, Stat_e, int, Identity_t&), 4-param
 //   kN3MsgTemplateIDRVA  = 0x1a771c  — N3Msg_TemplateIDToDynelID(Identity_t const&)
@@ -676,8 +672,8 @@ static const char* TryGetNanoName(const void* identity) {
         return nullptr;
     }
 
-    auto getInst = ReadCachedPtr<FnN3IMGetInstance>(kN3IMGetInstanceRVA);
-    auto getName = ReadCachedPtr<FnN3MsgGetName>(kN3MsgGetNameRVA);
+    auto getInst = ReadCachedPtr<FnN3IMGetInstance>(GuiAddrs()->iatN3IMGetInstance);
+    auto getName = ReadCachedPtr<FnN3MsgGetName>(GuiAddrs()->iatN3MsgGetName);
     if (!getInst || !getName) return nullptr;
 
     void* n3im = getInst();
@@ -849,25 +845,27 @@ bool InitTimerBarDrag() {
         return false;
     }
     g_guiBase = reinterpret_cast<uintptr_t>(gui);
+    const GuiBuild* addrs = GuiAddrs();
+    if (!addrs) return false;
 
     // Resolve GUI.dll function pointers.
     // N3Msg_GetName and N3InterfaceModule_t::GetInstance are cached
     // function pointers at known GUI.dll data section RVAs — resolved
     // lazily by ReadCachedPtr in TryGetNanoName.
     g_rwReposition = reinterpret_cast<FnRWReposition>(
-        g_guiBase + kRWRepositionRVA);
+        g_guiBase + addrs->rwReposition);
     g_rwSetScale = reinterpret_cast<FnRWSetScale>(
-        g_guiBase + 0x20b0c);  // RenderWindow_t::SetScale
+        g_guiBase + addrs->rwSetScale);
     g_rwResize = reinterpret_cast<FnRWResize>(
-        g_guiBase + 0x20938);  // RenderWindow_t::Resize
+        g_guiBase + addrs->rwResize);
     g_tsmGetInstance = reinterpret_cast<FnTSMGetInstance>(
-        g_guiBase + 0x51d05);  // TimerSystemModule_t::GetInstance
+        g_guiBase + addrs->tsmGetInstance);
     g_wcGetInstance = reinterpret_cast<FnWCGetInstance>(
-        g_guiBase + 0xb454);  // WindowController_c::GetInstance
+        g_guiBase + addrs->wcGetInstance);
     g_pbAdjustPowerLevel = reinterpret_cast<FnPBAdjustPowerLevel>(
-        g_guiBase + kPBAdjustPowerLevelRVA);  // PowerBar_t::AdjustPowerLevel
+        g_guiBase + addrs->pbAdjustPowerLevel);
     g_tsmStopTimerbar = reinterpret_cast<FnTSMStopTimerbar>(
-        g_guiBase + kTSMStopTimerbarRVA);     // TSM::StopTimerbarMessage
+        g_guiBase + addrs->tsmStopTimerbar);
 
     // Load saved position from DValues.
     LoadPosition();
@@ -876,7 +874,7 @@ bool InitTimerBarDrag() {
     RegisterSettingCallback(&OnSettingChanged);
 
     // Hook CreateTimer.
-    void* target = reinterpret_cast<void*>(g_guiBase + kCreateTimerRVA);
+    void* target = reinterpret_cast<void*>(g_guiBase + addrs->createTimer);
     auto* bytes = static_cast<uint8_t*>(target);
     Log("[timerbar] CreateTimer at %p, prologue: %02X %02X %02X %02X %02X",
         target, bytes[0], bytes[1], bytes[2], bytes[3], bytes[4]);
@@ -892,7 +890,7 @@ bool InitTimerBarDrag() {
 
     // Hook CreateGameTimer (overload 2 — equip, nano, attack, reload).
     {
-        void* target2 = reinterpret_cast<void*>(g_guiBase + kCreateGameTimerRVA);
+        void* target2 = reinterpret_cast<void*>(g_guiBase + addrs->createGameTimer);
         auto* bytes2 = static_cast<uint8_t*>(target2);
         Log("[timerbar] CreateGameTimer at %p, prologue: %02X %02X %02X %02X %02X",
             target2, bytes2[0], bytes2[1], bytes2[2], bytes2[3], bytes2[4]);

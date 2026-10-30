@@ -12,6 +12,10 @@
 //   7. The .bak is still locked (it's the running image), so it gets cleaned
 //      up on the next launch (step 1).
 //
+// Before patching, the untouched exe is kept as <name>_orig.exe (once): the
+// launcher's file check (checksums.chk) fails on the patched exe, and AOPlugins
+// hands that check the _orig instead.
+//
 // After patching, the flag persists permanently — no per-launch work needed.
 
 #include "laa_patch.h"
@@ -130,6 +134,23 @@ void PatchLargeAddressAware() {
     }
 
     Log("[laa] LargeAddressAware not set — patching exe on disk...");
+
+    // Keep the original for the launcher's file check: AnarchyOnline_orig.exe,
+    // unless one is there already (never overwrite an original with a copy).
+    wchar_t origPath[MAX_PATH] = {};
+    wcscpy_s(origPath, exePath);
+    wchar_t* dot = wcsrchr(origPath, L'.');
+    if (dot && wcsrchr(origPath, L'\\') < dot && len + 5 < MAX_PATH) {
+        wchar_t ext[16] = {};
+        wcscpy_s(ext, dot);
+        *dot = L'\0';
+        wcscat_s(origPath, L"_orig");
+        wcscat_s(origPath, ext);
+        if (CopyFileW(exePath, origPath, TRUE))
+            Log("[laa] original kept as %ls", origPath);
+        else if (GetLastError() != ERROR_FILE_EXISTS)
+            Log("[laa] could not keep the original as %ls (error %lu)", origPath, GetLastError());
+    }
 
     // Step 4: Rename the running exe to .bak.
     if (!MoveFileW(exePath, bakPath)) {

@@ -112,3 +112,16 @@ The build produces `version.dll`. The post-build step copies it (and its PDB) in
 ## License
 
 [MIT](LICENSE)
+
+## As an AOPlugins plugin (aoreloaded.dll)
+
+The same features also build as a plugin for [AOPlugins](https://github.com/McAndersDK/aoplugins) - a
+`version.dll` that loads several mods side by side - instead of as this `version.dll`: `cmake --preset windows-release
+&& cmake --build --preset windows-release --target aoreloaded` (Visual Studio's clang-cl; `linux-release` on Linux,
+xwin) gives `build/windows-release/aoreloaded.dll`; it goes into the client's `AOPlugins\` folder. `src/plugin/` implements the
+core (logging, hooks, settings) on AOPlugins, which also serves the options tab and the Favorites group from memory;
+the feature code is shared. Settings live in `AOPlugins.ini` `[aoreloaded]` (the values in `AOReloaded.ini` are taken
+over the first time). The frame rate cap, renderer settings and view distance are in ao-vk's plugin (`ao-vk.dll`).
+`tools/test-plugin-fake-client.ps1` runs it in AOPlugins' fake client. `tools/update-client.ps1 [-Client <dir>]` builds it
+and puts it into a client's `AOPlugins` folder; `tools/package-client.ps1` makes `dist/aoreloaded-package.zip` (the
+plugin and an `install.ps1`).

@@ -53,6 +53,11 @@ static SettingDef g_settings[] = {
     { "AOR_TBarW",     SettingType::Int, 113,     113,     32, 1024 },
     { "AOR_TBarH",     SettingType::Int,  10,      10,      8,  128 },
     { "AOR_TBarPrev",  SettingType::Bool,  0,       0,      0,    1 },
+    { "AOR_BagMove",   SettingType::Bool,  1,       1,      0,    1 },
+    { "AOR_AltSelect", SettingType::Bool,  1,       1,      0,    1 },
+    { "AOR_InvPins",   SettingType::Bool,  1,       1,      0,    1 },
+    { "AOR_SkillFavs", SettingType::Bool,  1,       1,      0,    1 },
+    { "AOR_SkillShift", SettingType::Bool, 1,       1,      0,    1 },
 };
 
 static constexpr int kSettingCount = sizeof(g_settings) / sizeof(g_settings[0]);
@@ -365,6 +370,16 @@ static const char kAorXmlBlock[] =
     "        <TextView value=\"Input\" layout_borders=\"Rect(0,10,0,3)\" />\n"
     "        <OptionCheckBox label=\"Numpad keys type in chat fix\""
     " layout_borders=\"Rect(10,0,0,0)\" opt_type=\"variant\" opt_variable=\"AOR_NumpadFix\"/>\n"
+    "        <OptionCheckBox label=\"Ctrl+click moves items between the inventory and the last opened backpack\""
+    " layout_borders=\"Rect(10,0,0,0)\" opt_type=\"variant\" opt_variable=\"AOR_BagMove\"/>\n"
+    "        <OptionCheckBox label=\"Alt+click selects several items; moving one moves them all\""
+    " layout_borders=\"Rect(10,0,0,0)\" opt_type=\"variant\" opt_variable=\"AOR_AltSelect\"/>\n"
+    "        <OptionCheckBox label=\"Ctrl+Alt+click pins an item to the top of the inventory list view\""
+    " layout_borders=\"Rect(10,0,0,0)\" opt_type=\"variant\" opt_variable=\"AOR_InvPins\"/>\n"
+    "        <OptionCheckBox label=\"Ctrl+Alt+click a skill to add it to the Favorites group of the skills window\""
+    " layout_borders=\"Rect(10,0,0,0)\" opt_type=\"variant\" opt_variable=\"AOR_SkillFavs\"/>\n"
+    "        <OptionCheckBox label=\"Shift+click on a skill's + or - changes it by 5\""
+    " layout_borders=\"Rect(10,0,0,0)\" opt_type=\"variant\" opt_variable=\"AOR_SkillShift\"/>\n"
     "\n"
     "        <TextView value=\"Debug\" layout_borders=\"Rect(0,10,0,3)\" />\n"
     "        <OptionCheckBox label=\"Enable debug logging (AOReloaded.log, requires restart)\""
@@ -491,7 +506,7 @@ bool IsDebugLogEnabled() {
     return GetPrivateProfileIntA(kIniSection, "AOR_DebugLog", 0, iniPath) != 0;
 }
 
-void PatchOptionsXml() {
+void ForEachGuiFile(const char* relPath, void (*fn)(const char* path)) {
     char clientDir[MAX_PATH];
     if (!GetClientDir(clientDir, MAX_PATH)) {
         Log("[settings] could not resolve client directory");
@@ -502,8 +517,8 @@ void PatchOptionsXml() {
     {
         char path[MAX_PATH];
         _snprintf_s(path, sizeof(path), _TRUNCATE,
-                    "%scd_image\\gui\\Default\\OptionPanel\\Root.xml", clientDir);
-        PatchSingleRootXml(path);
+                    "%scd_image\\gui\\Default\\%s", clientDir, relPath);
+        fn(path);
     }
 
     // 2. Scan every GUI in cd_image/gui/ (covers non-Default GUIs shipped
@@ -523,9 +538,9 @@ void PatchOptionsXml() {
 
                 char path[MAX_PATH];
                 _snprintf_s(path, sizeof(path), _TRUNCATE,
-                            "%scd_image\\gui\\%s\\OptionPanel\\Root.xml",
-                            clientDir, entry.cFileName);
-                PatchSingleRootXml(path);
+                            "%scd_image\\gui\\%s\\%s",
+                            clientDir, entry.cFileName, relPath);
+                fn(path);
             } while (FindNextFileA(hFind, &entry));
             FindClose(hFind);
         }
@@ -533,7 +548,7 @@ void PatchOptionsXml() {
 
     // 3. Scan %LocalAppData%\Funcom\Anarchy Online\<hash>\<sub>\Gui\*\
     //    for custom GUIs installed via the standard AO user-install method.
-    //    Structure: <hash>\<sub>\Gui\<GUIName>\OptionPanel\Root.xml
+    //    Structure: <hash>\<sub>\Gui\<GUIName>\<relPath>
     {
         char appDataBase[MAX_PATH];
         DWORD len = GetEnvironmentVariableA("LOCALAPPDATA", appDataBase, MAX_PATH);
@@ -582,10 +597,10 @@ void PatchOptionsXml() {
                     char path[MAX_PATH];
                     _snprintf_s(path, sizeof(path), _TRUNCATE,
                                 "%s\\Funcom\\Anarchy Online\\%s\\%s"
-                                "\\Gui\\%s\\OptionPanel\\Root.xml",
+                                "\\Gui\\%s\\%s",
                                 appDataBase, hashEntry.cFileName,
-                                subEntry.cFileName, guiEntry.cFileName);
-                    PatchSingleRootXml(path);
+                                subEntry.cFileName, guiEntry.cFileName, relPath);
+                    fn(path);
                 } while (FindNextFileA(hGui, &guiEntry));
                 FindClose(hGui);
             } while (FindNextFileA(hSub, &subEntry));
@@ -594,6 +609,10 @@ void PatchOptionsXml() {
         FindClose(hHash);
     }
 done_appdata:;
+}
+
+void PatchOptionsXml() {
+    ForEachGuiFile("OptionPanel\\Root.xml", PatchSingleRootXml);
 }
 
 void SettingsInit() {

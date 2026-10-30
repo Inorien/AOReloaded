@@ -9,6 +9,7 @@
 #include "hooks/input_handler.h"
 #include "hooks/hook_engine.h"
 #include "ao/game_api.h"
+#include "ao/gui_build.h"
 #include "core/logging.h"
 
 #include <windows.h>
@@ -78,37 +79,37 @@ static T ReadCachedPtr(uint32_t rva) {
 }
 
 static void* GetN3IM() {
-    auto fn = ReadCachedPtr<FnGetInstance>(0x1a772c);
+    auto fn = ReadCachedPtr<FnGetInstance>(GuiAddrs()->iatN3IMGetInstance);
     return fn ? fn() : nullptr;
 }
 
 static void CameraMouseLookMovement(float dx, float dy) {
     void* n3im = GetN3IM();
-    auto fn = ReadCachedPtr<FnN3MsgLook>(0x1a7604);
+    auto fn = ReadCachedPtr<FnN3MsgLook>(GuiAddrs()->iatN3MsgCameraMouseLookMovement);
     if (n3im && fn) fn(n3im, dx, dy);
 }
 
 static void MouseMovement(float dx, float dy) {
     void* n3im = GetN3IM();
-    auto fn = ReadCachedPtr<FnN3MsgLook>(0x1a7600);
+    auto fn = ReadCachedPtr<FnN3MsgLook>(GuiAddrs()->iatN3MsgMouseMovement);
     if (n3im && fn) fn(n3im, dx, dy);
 }
 
 static void EndCameraMouseLook() {
     void* n3im = GetN3IM();
-    auto fn = ReadCachedPtr<FnN3MsgEnd>(0x1a760c);
+    auto fn = ReadCachedPtr<FnN3MsgEnd>(GuiAddrs()->iatN3MsgEndCameraMouseLook);
     if (n3im && fn) fn(n3im);
 }
 
 static void EndMouseLook() {
     void* n3im = GetN3IM();
-    auto fn = ReadCachedPtr<FnN3MsgEnd>(0x1a7608);
+    auto fn = ReadCachedPtr<FnN3MsgEnd>(GuiAddrs()->iatN3MsgEndMouseLook);
     if (n3im && fn) fn(n3im);
 }
 
 static void AFCMSend(int cmd, int param) {
-    auto getInst = ReadCachedPtr<FnGetInstance>(0x1a70e0);
-    auto send    = ReadCachedPtr<FnAFCMSend>(0x1a70e4);
+    auto getInst = ReadCachedPtr<FnGetInstance>(GuiAddrs()->iatAFCMGetInstance);
+    auto send    = ReadCachedPtr<FnAFCMSend>(GuiAddrs()->iatAFCMSend);
     if (getInst && send) {
         void* afcm = getInst();
         if (afcm) send(afcm, cmd, param);
@@ -121,12 +122,14 @@ static bool Init() {
         Log("[input] GUI.dll not loaded");
         return false;
     }
+    const GuiBuild* addrs = GuiAddrs();
+    if (!addrs) return false;
     g_guiBase = reinterpret_cast<uintptr_t>(gui);
     Log("[input] GUI.dll at %p", gui);
 
-    WC_GetInstance      = reinterpret_cast<FnWCGetInstance>(g_guiBase + 0xb454);
-    WC_GetDragObject    = reinterpret_cast<FnWCGetDragObj>(g_guiBase + 0x156e29);
-    WC_SetMousePosition = reinterpret_cast<FnWCSetMousePos>(g_guiBase + 0x156abf);
+    WC_GetInstance      = reinterpret_cast<FnWCGetInstance>(g_guiBase + addrs->wcGetInstance);
+    WC_GetDragObject    = reinterpret_cast<FnWCGetDragObj>(g_guiBase + addrs->wcGetDragObject);
+    WC_SetMousePosition = reinterpret_cast<FnWCSetMousePos>(g_guiBase + addrs->wcSetMousePosition);
     return true;
 }
 
@@ -303,8 +306,8 @@ static void* GetEngine() {
 // param_1: false = key down, true = key up.
 // Original computes action = param_1 + 1 (false→1=StartForward, true→2=StopForward).
 
-constexpr uint32_t kSlotMovementForwardRVA = 0x00027ec1;
-constexpr uint32_t kAutorunCallerRetRVA    = 0x00027fcd;  // return addr from SlotMovementAutoRun's CALL
+// GuiBuild::slotMovementForward; GuiBuild::autorunCallerRet is the return
+// address from SlotMovementAutoRun's CALL.
 
 using FnSlotMovementForward = void(__thiscall*)(void* this_ecx, bool param_1);
 static FnSlotMovementForward g_origSlotForward = nullptr;
@@ -317,7 +320,7 @@ static void __fastcall SlotMovementForwardDetour(
     }
 
     bool isAutorun = (__builtin_return_address(0) ==
-                      reinterpret_cast<void*>(GUIAPI::g_guiBase + kAutorunCallerRetRVA));
+                      reinterpret_cast<void*>(GUIAPI::g_guiBase + GuiAddrs()->autorunCallerRet));
 
     if (isAutorun) {
         // Autorun key pressed (key-down only — SlotMovementAutoRun
@@ -382,19 +385,15 @@ static void __fastcall MovementChangedDetour(
 
 // ── ActionViewMouseHandler_c detours ────────────────────────────────────
 
-constexpr uint32_t kOnMouseDownRVA = 0x0002c2ee;
 using FnOnMouseDown = void(__thiscall*)(void* this_ecx, const float* pos, int button, int clickFlags);
 static FnOnMouseDown g_origOnMouseDown = nullptr;
 
-constexpr uint32_t kOnMouseMoveRVA = 0x0002c17b;
 using FnOnMouseMove = void(__thiscall*)(void* this_ecx, const float* delta);
 static FnOnMouseMove g_origOnMouseMove = nullptr;
 
-constexpr uint32_t kOnMouseUpRVA = 0x0002c469;
 using FnOnMouseUp = void(__thiscall*)(void* this_ecx, const float* pos, int button);
 static FnOnMouseUp g_origOnMouseUp = nullptr;
 
-constexpr uint32_t kEndDragRVA = 0x0002c0e5;
 using FnEndDrag = void(__thiscall*)(void* this_ecx);
 static FnEndDrag g_origEndDrag = nullptr;
 
@@ -523,7 +522,7 @@ static void __fastcall OnMouseUpDetour(void* this_ecx, void* /*edx*/,
 
     float threshold = 0.0f;
     if (GUIAPI::g_guiBase) {
-        threshold = *reinterpret_cast<float*>(GUIAPI::g_guiBase + 0x1aeaf4);
+        threshold = *reinterpret_cast<float*>(GUIAPI::g_guiBase + GuiAddrs()->dragThreshold);
     }
 
     bool wasDragging = (g_input.state == MouseState::DRAGGING_LMB ||
@@ -635,7 +634,7 @@ bool InitInputHandler() {
 
     // Hook SlotMovementForward (GUI.dll) — autorun detection.
     {
-        void* addr = ResolveRVA("GUI.dll", kSlotMovementForwardRVA);
+        void* addr = ResolveRVA("GUI.dll", GuiAddrs()->slotMovementForward);
         if (!addr) { Log("[input] SlotMovementForward RVA invalid"); return false; }
         auto* bytes = static_cast<uint8_t*>(addr);
         Log("[input] SlotMovementForward at %p, prologue: %02X %02X %02X %02X %02X",
@@ -670,7 +669,7 @@ bool InitInputHandler() {
 
     // Hook OnMouseDown.
     {
-        void* addr = ResolveRVA("GUI.dll", kOnMouseDownRVA);
+        void* addr = ResolveRVA("GUI.dll", GuiAddrs()->onMouseDown);
         if (!addr) { Log("[input] OnMouseDown RVA invalid"); return false; }
         void* tramp = nullptr;
         if (!InstallHook(addr, reinterpret_cast<void*>(&OnMouseDownDetour), &tramp)) {
@@ -682,7 +681,7 @@ bool InitInputHandler() {
 
     // Hook OnMouseMove.
     {
-        void* addr = ResolveRVA("GUI.dll", kOnMouseMoveRVA);
+        void* addr = ResolveRVA("GUI.dll", GuiAddrs()->onMouseMove);
         if (!addr) { Log("[input] OnMouseMove RVA invalid"); return false; }
         void* tramp = nullptr;
         if (!InstallHook(addr, reinterpret_cast<void*>(&OnMouseMoveDetour), &tramp)) {
@@ -694,7 +693,7 @@ bool InitInputHandler() {
 
     // Hook OnMouseUp.
     {
-        void* addr = ResolveRVA("GUI.dll", kOnMouseUpRVA);
+        void* addr = ResolveRVA("GUI.dll", GuiAddrs()->onMouseUp);
         if (!addr) { Log("[input] OnMouseUp RVA invalid"); return false; }
         void* tramp = nullptr;
         if (!InstallHook(addr, reinterpret_cast<void*>(&OnMouseUpDetour), &tramp)) {
@@ -706,7 +705,7 @@ bool InitInputHandler() {
 
     // Hook EndDrag.
     {
-        void* addr = ResolveRVA("GUI.dll", kEndDragRVA);
+        void* addr = ResolveRVA("GUI.dll", GuiAddrs()->endDrag);
         if (!addr) { Log("[input] EndDrag RVA invalid"); return false; }
         void* tramp = nullptr;
         if (!InstallHook(addr, reinterpret_cast<void*>(&EndDragDetour), &tramp)) {

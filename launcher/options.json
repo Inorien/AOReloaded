@@ -1,0 +1,39 @@
+{
+ "schema": 1,
+ "groups": [
+  {
+   "title": "Camera",
+   "file": "AOPlugins.ini", "section": "aoreloaded",
+   "options": [
+    {"key": "AOR_CamOn", "label": "WoW-style camera: it swings back behind you after you drag it with the left mouse button", "type": "bool", "default": 1},
+    {"key": "AOR_CYawSpd", "label": "How fast the camera swings back", "type": "int", "min": 1, "max": 10, "step": 1, "default": 2, "parent": "AOR_CamOn"},
+    {"key": "AOR_MouseRun", "label": "Hold both mouse buttons to run forward", "type": "bool", "default": 1, "parent": "AOR_CamOn"},
+    {"key": "AOR_AutoRun", "label": "Autorun toggles, and works together with the forward key", "type": "bool", "default": 1}
+   ]
+  },
+  {
+   "title": "Timer bars",
+   "note": "Where the cast and action timer bars are. You can also drag a bar in the game while it runs.",
+   "file": "AOPlugins.ini", "section": "aoreloaded",
+   "options": [
+    {"key": "AOR_TBarX", "label": "Left edge (pixels)", "type": "int", "min": 0, "max": 4096, "step": 1, "default": 40},
+    {"key": "AOR_TBarY", "label": "Top edge (pixels)", "type": "int", "min": 0, "max": 4096, "step": 1, "default": 40},
+    {"key": "AOR_TBarW", "label": "Width", "type": "int", "min": 32, "max": 1024, "step": 1, "default": 113},
+    {"key": "AOR_TBarH", "label": "Height", "type": "int", "min": 8, "max": 128, "step": 1, "default": 10},
+    {"key": "AOR_TBarPrev", "label": "Show a preview bar to drag into place (more bars stack downwards from the top one)", "type": "bool", "default": 0}
+   ]
+  },
+  {
+   "title": "Input and inventory",
+   "file": "AOPlugins.ini", "section": "aoreloaded",
+   "options": [
+    {"key": "AOR_NumpadFix", "label": "The number pad types in the chat", "type": "bool", "default": 1},
+    {"key": "AOR_BagMove", "label": "Ctrl+click moves an item between the inventory and the backpack opened last", "type": "bool", "default": 1},
+    {"key": "AOR_AltSelect", "label": "Alt+click selects several items; moving one moves them all", "type": "bool", "default": 1},
+    {"key": "AOR_InvPins", "label": "Ctrl+Alt+click pins an item to the top of the inventory's list view", "type": "bool", "default": 1},
+    {"key": "AOR_SkillFavs", "label": "Ctrl+Alt+click a skill to add it to the skills window's Favorites", "type": "bool", "default": 1},
+    {"key": "AOR_SkillShift", "label": "Shift+click a skill's + or - to change it by 5", "type": "bool", "default": 1}
+   ]
+  }
+ ]
+}
